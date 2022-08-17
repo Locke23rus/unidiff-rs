@@ -304,6 +304,7 @@ pub struct PatchedFile {
     /// Target file timestamp
     pub target_timestamp: Option<String>,
     hunks: Vec<Hunk>,
+    pub is_binary_file: bool,
 }
 
 impl PatchedFile {
@@ -315,6 +316,7 @@ impl PatchedFile {
             source_timestamp: None,
             target_timestamp: None,
             hunks: vec![],
+            is_binary_file: false,
         }
     }
 
@@ -329,7 +331,8 @@ impl PatchedFile {
             target_file: target_file.into(),
             source_timestamp: None,
             target_timestamp: None,
-            hunks: hunks,
+            hunks,
+            is_binary_file: false,
         }
     }
 
@@ -516,7 +519,7 @@ impl IndexMut<usize> for PatchedFile {
     }
 }
 
-/// Unfied patchset
+/// Unified patchset
 ///
 /// You can iterate over it to get ``PatchedFile``s.
 ///
@@ -663,6 +666,7 @@ impl PatchSet {
                     source_timestamp: source_timestamp.clone(),
                     target_timestamp: target_timestamp.clone(),
                     hunks: Vec::new(),
+                    is_binary_file: false,
                 });
                 continue;
             }

@@ -18,6 +18,7 @@ fn test_parse_sample0_diff() {
     assert!(patch[0].is_modified_file());
     assert!(!patch[0].is_added_file());
     assert!(!patch[0].is_removed_file());
+    assert!(!patch[0].is_binary_file);
 
     // Hunk 1: five additions, no deletions, a section header
     assert_eq!(6, patch[0][0].added());
@@ -42,11 +43,13 @@ fn test_parse_sample0_diff() {
     assert!(!patch[1].is_modified_file());
     assert!(patch[1].is_added_file());
     assert!(!patch[1].is_removed_file());
+    assert!(!patch[1].is_binary_file);
 
     // third file is removed
     assert!(!patch[2].is_modified_file());
     assert!(!patch[2].is_added_file());
     assert!(patch[2].is_removed_file());
+    assert!(!patch[2].is_binary_file);
 }
 
 #[test]
@@ -56,23 +59,33 @@ fn test_parse_git_diff() {
     let mut patch = PatchSet::new();
     patch.parse(&buf).unwrap();
 
+    // 3 files updated by diff
     assert_eq!(3, patch.len());
 
+    // 1 added file
     let added_files = patch.added_files();
     assert_eq!(1, added_files.len());
     assert_eq!("added_file", added_files[0].path());
+    // 1 hunk, 4 lines
+    assert_eq!(1, added_files[0].len());
     assert_eq!(4, added_files[0].added());
     assert_eq!(0, added_files[0].removed());
 
+    // 1 removed file
     let removed_files = patch.removed_files();
     assert_eq!(1, removed_files.len());
     assert_eq!("removed_file", removed_files[0].path());
+    // 1 hunk, 3 removed lines
+    assert_eq!(1, removed_files[0].len());
     assert_eq!(0, removed_files[0].added());
     assert_eq!(3, removed_files[0].removed());
 
+    // 1 modified file
     let modified_files = patch.modified_files();
     assert_eq!(1, modified_files.len());
     assert_eq!("modified_file", modified_files[0].path());
+    // 1 hunk, 3 added lines, 1 removed line
+    assert_eq!(1, modified_files[0].len());
     assert_eq!(3, modified_files[0].added());
     assert_eq!(1, modified_files[0].removed());
 }
@@ -84,23 +97,33 @@ fn test_parse_bzr_diff() {
     let mut patch = PatchSet::new();
     patch.parse(&buf).unwrap();
 
+    // 3 files updated by diff
     assert_eq!(3, patch.len());
 
+    // 1 added file
     let added_files = patch.added_files();
     assert_eq!(1, added_files.len());
     assert_eq!("added_file", added_files[0].path());
+    // 1 hunk, 4 lines
+    assert_eq!(1, added_files[0].len());
     assert_eq!(4, added_files[0].added());
     assert_eq!(0, added_files[0].removed());
 
+    // 1 removed file
     let removed_files = patch.removed_files();
     assert_eq!(1, removed_files.len());
     assert_eq!("removed_file", removed_files[0].path());
+    // 1 hunk, 3 removed lines
+    assert_eq!(1, removed_files[0].len());
     assert_eq!(0, removed_files[0].added());
     assert_eq!(3, removed_files[0].removed());
 
+    // 1 modified file
     let modified_files = patch.modified_files();
     assert_eq!(1, modified_files.len());
     assert_eq!("modified_file", modified_files[0].path());
+    // 1 hunk, 3 added lines, 1 removed line
+    assert_eq!(1, modified_files[0].len());
     assert_eq!(3, modified_files[0].added());
     assert_eq!(1, modified_files[0].removed());
 }
@@ -112,23 +135,33 @@ fn test_parse_hg_diff() {
     let mut patch = PatchSet::new();
     patch.parse(&buf).unwrap();
 
+    // 3 files updated by diff
     assert_eq!(3, patch.len());
 
+    // 1 added file
     let added_files = patch.added_files();
     assert_eq!(1, added_files.len());
     assert_eq!("added_file", added_files[0].path());
+    // 1 hunk, 4 lines
+    assert_eq!(1, added_files[0].len());
     assert_eq!(4, added_files[0].added());
     assert_eq!(0, added_files[0].removed());
 
+    // 1 removed file
     let removed_files = patch.removed_files();
     assert_eq!(1, removed_files.len());
     assert_eq!("removed_file", removed_files[0].path());
+    // 1 hunk, 3 removed lines
+    assert_eq!(1, removed_files[0].len());
     assert_eq!(0, removed_files[0].added());
     assert_eq!(3, removed_files[0].removed());
 
+    // 1 modified file
     let modified_files = patch.modified_files();
     assert_eq!(1, modified_files.len());
     assert_eq!("modified_file", modified_files[0].path());
+    // 1 hunk, 3 added lines, 1 removed line
+    assert_eq!(1, modified_files[0].len());
     assert_eq!(3, modified_files[0].added());
     assert_eq!(1, modified_files[0].removed());
 }
@@ -140,23 +173,33 @@ fn test_parse_svn_diff() {
     let mut patch = PatchSet::new();
     patch.parse(&buf).unwrap();
 
+    // 3 files updated by diff
     assert_eq!(3, patch.len());
 
+    // 1 added file
     let added_files = patch.added_files();
     assert_eq!(1, added_files.len());
     assert_eq!("added_file", added_files[0].path());
+    // 1 hunk, 4 lines
+    assert_eq!(1, added_files[0].len());
     assert_eq!(4, added_files[0].added());
     assert_eq!(0, added_files[0].removed());
 
+    // 1 removed file
     let removed_files = patch.removed_files();
     assert_eq!(1, removed_files.len());
     assert_eq!("removed_file", removed_files[0].path());
+    // 1 hunk, 3 removed lines
+    assert_eq!(1, removed_files[0].len());
     assert_eq!(0, removed_files[0].added());
     assert_eq!(3, removed_files[0].removed());
 
+    // 1 modified file
     let modified_files = patch.modified_files();
     assert_eq!(1, modified_files.len());
     assert_eq!("modified_file", modified_files[0].path());
+    // 1 hunk, 3 added lines, 1 removed line
+    assert_eq!(1, modified_files[0].len());
     assert_eq!(3, modified_files[0].added());
     assert_eq!(1, modified_files[0].removed());
 }
@@ -323,6 +366,7 @@ fn test_parse_from_encoding() {
     let mut patch = PatchSet::from_encoding("utf-8");
     patch.parse_bytes(buf).unwrap();
 
+    // 3 files updated by diff
     assert_eq!(3, patch.len());
     assert_eq!("holá mundo!", patch[0][0][1].value);
 }
@@ -330,7 +374,7 @@ fn test_parse_from_encoding() {
 #[test]
 fn test_single_line_diff() {
     {
-        let buf = include_str!("fixtures/sample4.diff");
+        let buf = include_str!("fixtures/sample_single_line.diff");
 
         let mut patch = PatchSet::new();
         patch.parse(&buf).unwrap();
@@ -361,7 +405,7 @@ fn test_single_line_diff() {
 
 #[test]
 fn test_single_line_diff_with_trailer() {
-    let buf = include_str!("fixtures/sample4-plus.diff");
+    let buf = include_str!("fixtures/sample_single_line_with_trailer.diff");
 
     let mut patch = PatchSet::new();
     patch.parse(&buf).unwrap();

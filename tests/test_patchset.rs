@@ -372,6 +372,27 @@ fn test_parse_from_encoding() {
 }
 
 #[test]
+fn test_parse_no_newline_at_end_of_file() {
+    let buf = include_str!("fixtures/sample3.diff");
+
+    let mut patch = PatchSet::new();
+    patch.parse(&buf).unwrap();
+
+    // 3 files updated by diff
+    assert_eq!(3, patch.len());
+    assert_eq!("\\", patch.added_files()[0][0][4].line_type);
+    assert_eq!(
+        " No newline at end of file",
+        patch.added_files()[0][0][4].value
+    );
+    assert_eq!("\\", patch.modified_files()[0][0][8].line_type);
+    assert_eq!(
+        " No newline at end of file",
+        patch.modified_files()[0][0][8].value
+    );
+}
+
+#[test]
 fn test_single_line_diff() {
     {
         let buf = include_str!("fixtures/sample_single_line.diff");

@@ -36,6 +36,7 @@ lazy_static! {
     static ref RE_TARGET_FILENAME: Regex = Regex::new(r"^\+\+\+ (?P<filename>[^\t\n]+)(?:\t(?P<timestamp>[^\n]+))?").unwrap();
     static ref RE_HUNK_HEADER: Regex = Regex::new(r"^@@ -(?P<source_start>\d+)(?:,(?P<source_length>\d+))? \+(?P<target_start>\d+)(?:,(?P<target_length>\d+))? @@[ ]?(?P<section_header>.*)").unwrap();
     static ref RE_HUNK_BODY_LINE: Regex = Regex::new(r"^(?P<line_type>[- \n\+\\]?)(?P<value>.*)").unwrap();
+    static ref RE_NO_NEWLINE_MARKER: Regex = Regex::new(r"^\\ No newline at end of file").unwrap();
 }
 
 /// Diff line is added
@@ -46,6 +47,10 @@ pub const LINE_TYPE_REMOVED: &'static str = "-";
 pub const LINE_TYPE_CONTEXT: &'static str = " ";
 /// Diff line is empty
 pub const LINE_TYPE_EMPTY: &'static str = "\n";
+/// Diff line no newline at end of file
+pub const LINE_TYPE_NO_NEWLINE: &'static str = "\\";
+/// FIXME add comment
+pub const LINE_VALUE_NO_NEWLINE: &'static str = " No newline at end of file";
 
 /// Error type
 #[derive(Debug, Clone)]
@@ -56,6 +61,8 @@ pub enum Error {
     UnexpectedHunk(String),
     /// Hunk line expected
     ExpectLine(String),
+    /// Unexpected marker
+    UnexpectedMarker(String),
 }
 
 impl fmt::Display for Error {
@@ -64,6 +71,7 @@ impl fmt::Display for Error {
             Error::TargetWithoutSource(ref l) => write!(f, "Target without source: {}", l),
             Error::UnexpectedHunk(ref l) => write!(f, "Unexpected hunk found: {}", l),
             Error::ExpectLine(ref l) => write!(f, "Hunk line expected: {}", l),
+            Error::UnexpectedMarker(ref l) => write!(f, "Unexpected marker: {}", l),
         }
     }
 }
@@ -74,6 +82,7 @@ impl error::Error for Error {
             Error::TargetWithoutSource(..) => "Target without source",
             Error::UnexpectedHunk(..) => "Unexpected hunk found",
             Error::ExpectLine(..) => "Hunk line expected",
+            Error::UnexpectedMarker(..) => "Unexpected marker",
         }
     }
 }
@@ -480,6 +489,16 @@ impl PatchedFile {
     pub fn hunks_mut(&mut self) -> &mut [Hunk] {
         &mut self.hunks
     }
+
+    fn add_no_newline_marker_to_last_hunk(&mut self) -> Result<()> {
+        if self.hunks.len() > 0 {
+            let last_hunk = self.hunks.last_mut().unwrap();
+            last_hunk.append(Line::new(LINE_VALUE_NO_NEWLINE, "\\"));
+            Ok(())
+        } else {
+            return Err(Error::UnexpectedMarker(LINE_VALUE_NO_NEWLINE.to_owned()));
+        }
+    }
 }
 
 impl fmt::Display for PatchedFile {
@@ -677,6 +696,16 @@ impl PatchSet {
                 } else {
                     return Err(Error::UnexpectedHunk(line.to_owned()));
                 }
+            }
+
+            // check for no newline marker
+            if RE_NO_NEWLINE_MARKER.is_match(line) {
+                if let Some(ref mut patched_file) = current_file {
+                    patched_file.add_no_newline_marker_to_last_hunk()?;
+                } else {
+                    return Err(Error::UnexpectedMarker(line.to_owned()));
+                }
+                continue;
             }
         }
         if let Some(patched_file) = current_file {

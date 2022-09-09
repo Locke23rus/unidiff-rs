@@ -130,6 +130,11 @@ impl Line {
     pub fn is_context(&self) -> bool {
         LINE_TYPE_CONTEXT == &self.line_type
     }
+
+    /// Diff line type is no newline
+    pub fn is_no_newline(&self) -> bool {
+        LINE_TYPE_NO_NEWLINE == &self.line_type
+    }
 }
 
 impl fmt::Display for Line {

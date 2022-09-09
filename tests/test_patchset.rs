@@ -1,6 +1,6 @@
 extern crate unidiff;
 
-use unidiff::{PatchSet, LINE_TYPE_CONTEXT, LINE_TYPE_NO_NEWLINE};
+use unidiff::PatchSet;
 
 #[test]
 fn test_parse_sample0_diff() {
@@ -380,15 +380,12 @@ fn test_parse_no_newline_at_end_of_file() {
 
     // 3 files updated by diff
     assert_eq!(3, patch.len());
-    assert_eq!(LINE_TYPE_NO_NEWLINE, patch.added_files()[0][0][4].line_type);
+    assert!(patch.added_files()[0][0][4].is_no_newline());
     assert_eq!(
         " No newline at end of file",
         patch.added_files()[0][0][4].value
     );
-    assert_eq!(
-        LINE_TYPE_NO_NEWLINE,
-        patch.modified_files()[0][0][8].line_type
-    );
+    assert!(patch.modified_files()[0][0][8].is_no_newline());
     assert_eq!(
         " No newline at end of file",
         patch.modified_files()[0][0][8].value
@@ -417,10 +414,10 @@ fn test_parse_dos_line_endings_empty_line_type() {
     // 2 files updated by diff
     assert_eq!(2, patch.len());
     assert_eq!("", patch[0][0][6].value);
-    assert_eq!(LINE_TYPE_CONTEXT, patch.modified_files()[0][0][6].line_type);
+    assert!(patch.modified_files()[0][0][6].is_context());
 
     assert_eq!("", patch[1][0][6].value);
-    assert_eq!(LINE_TYPE_CONTEXT, patch.modified_files()[1][0][6].line_type);
+    assert!(patch.modified_files()[1][0][6].is_context());
 }
 
 #[test]

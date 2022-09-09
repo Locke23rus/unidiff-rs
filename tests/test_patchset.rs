@@ -55,13 +55,7 @@ fn test_parse_sample0_diff() {
     assert_eq!(17, patch.removed());
 }
 
-#[test]
-fn test_parse_git_diff() {
-    let buf = include_str!("fixtures/git.diff");
-
-    let mut patch = PatchSet::new();
-    patch.parse(&buf).unwrap();
-
+fn assert_generic_vcs_diff(patch: PatchSet) {
     // 3 files updated by diff
     assert_eq!(3, patch.len());
 
@@ -94,6 +88,16 @@ fn test_parse_git_diff() {
 
     assert_eq!(7, patch.added());
     assert_eq!(4, patch.removed());
+}
+
+#[test]
+fn test_parse_git_diff() {
+    let buf = include_str!("fixtures/git.diff");
+
+    let mut patch = PatchSet::new();
+    patch.parse(&buf).unwrap();
+
+    assert_generic_vcs_diff(patch);
 }
 
 #[test]
@@ -103,38 +107,7 @@ fn test_parse_bzr_diff() {
     let mut patch = PatchSet::new();
     patch.parse(&buf).unwrap();
 
-    // 3 files updated by diff
-    assert_eq!(3, patch.len());
-
-    // 1 added file
-    let added_files = patch.added_files();
-    assert_eq!(1, added_files.len());
-    assert_eq!("added_file", added_files[0].path());
-    // 1 hunk, 4 lines
-    assert_eq!(1, added_files[0].len());
-    assert_eq!(4, added_files[0].added());
-    assert_eq!(0, added_files[0].removed());
-
-    // 1 removed file
-    let removed_files = patch.removed_files();
-    assert_eq!(1, removed_files.len());
-    assert_eq!("removed_file", removed_files[0].path());
-    // 1 hunk, 3 removed lines
-    assert_eq!(1, removed_files[0].len());
-    assert_eq!(0, removed_files[0].added());
-    assert_eq!(3, removed_files[0].removed());
-
-    // 1 modified file
-    let modified_files = patch.modified_files();
-    assert_eq!(1, modified_files.len());
-    assert_eq!("modified_file", modified_files[0].path());
-    // 1 hunk, 3 added lines, 1 removed line
-    assert_eq!(1, modified_files[0].len());
-    assert_eq!(3, modified_files[0].added());
-    assert_eq!(1, modified_files[0].removed());
-
-    assert_eq!(7, patch.added());
-    assert_eq!(4, patch.removed());
+    assert_generic_vcs_diff(patch);
 }
 
 #[test]
@@ -144,38 +117,7 @@ fn test_parse_hg_diff() {
     let mut patch = PatchSet::new();
     patch.parse(&buf).unwrap();
 
-    // 3 files updated by diff
-    assert_eq!(3, patch.len());
-
-    // 1 added file
-    let added_files = patch.added_files();
-    assert_eq!(1, added_files.len());
-    assert_eq!("added_file", added_files[0].path());
-    // 1 hunk, 4 lines
-    assert_eq!(1, added_files[0].len());
-    assert_eq!(4, added_files[0].added());
-    assert_eq!(0, added_files[0].removed());
-
-    // 1 removed file
-    let removed_files = patch.removed_files();
-    assert_eq!(1, removed_files.len());
-    assert_eq!("removed_file", removed_files[0].path());
-    // 1 hunk, 3 removed lines
-    assert_eq!(1, removed_files[0].len());
-    assert_eq!(0, removed_files[0].added());
-    assert_eq!(3, removed_files[0].removed());
-
-    // 1 modified file
-    let modified_files = patch.modified_files();
-    assert_eq!(1, modified_files.len());
-    assert_eq!("modified_file", modified_files[0].path());
-    // 1 hunk, 3 added lines, 1 removed line
-    assert_eq!(1, modified_files[0].len());
-    assert_eq!(3, modified_files[0].added());
-    assert_eq!(1, modified_files[0].removed());
-
-    assert_eq!(7, patch.added());
-    assert_eq!(4, patch.removed());
+    assert_generic_vcs_diff(patch);
 }
 
 #[test]
@@ -185,38 +127,7 @@ fn test_parse_svn_diff() {
     let mut patch = PatchSet::new();
     patch.parse(&buf).unwrap();
 
-    // 3 files updated by diff
-    assert_eq!(3, patch.len());
-
-    // 1 added file
-    let added_files = patch.added_files();
-    assert_eq!(1, added_files.len());
-    assert_eq!("added_file", added_files[0].path());
-    // 1 hunk, 4 lines
-    assert_eq!(1, added_files[0].len());
-    assert_eq!(4, added_files[0].added());
-    assert_eq!(0, added_files[0].removed());
-
-    // 1 removed file
-    let removed_files = patch.removed_files();
-    assert_eq!(1, removed_files.len());
-    assert_eq!("removed_file", removed_files[0].path());
-    // 1 hunk, 3 removed lines
-    assert_eq!(1, removed_files[0].len());
-    assert_eq!(0, removed_files[0].added());
-    assert_eq!(3, removed_files[0].removed());
-
-    // 1 modified file
-    let modified_files = patch.modified_files();
-    assert_eq!(1, modified_files.len());
-    assert_eq!("modified_file", modified_files[0].path());
-    // 1 hunk, 3 added lines, 1 removed line
-    assert_eq!(1, modified_files[0].len());
-    assert_eq!(3, modified_files[0].added());
-    assert_eq!(1, modified_files[0].removed());
-
-    assert_eq!(7, patch.added());
-    assert_eq!(4, patch.removed());
+    assert_generic_vcs_diff(patch);
 }
 
 #[test]

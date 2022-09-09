@@ -736,6 +736,22 @@ impl PatchSet {
     pub fn files_mut(&mut self) -> &mut [PatchedFile] {
         &mut self.files
     }
+
+    /// Count of lines added
+    pub fn added(&self) -> usize {
+        self.files
+            .iter()
+            .map(|f| f.added())
+            .fold(0, |acc, x| acc + x)
+    }
+
+    /// Count of lines removed
+    pub fn removed(&self) -> usize {
+        self.files
+            .iter()
+            .map(|f| f.removed())
+            .fold(0, |acc, x| acc + x)
+    }
 }
 
 impl fmt::Display for PatchSet {

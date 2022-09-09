@@ -50,6 +50,9 @@ fn test_parse_sample0_diff() {
     assert!(!patch[2].is_added_file());
     assert!(patch[2].is_removed_file());
     assert!(!patch[2].is_binary_file);
+
+    assert_eq!(21, patch.added());
+    assert_eq!(17, patch.removed());
 }
 
 #[test]
@@ -88,6 +91,9 @@ fn test_parse_git_diff() {
     assert_eq!(1, modified_files[0].len());
     assert_eq!(3, modified_files[0].added());
     assert_eq!(1, modified_files[0].removed());
+
+    assert_eq!(7, patch.added());
+    assert_eq!(4, patch.removed());
 }
 
 #[test]
@@ -126,6 +132,9 @@ fn test_parse_bzr_diff() {
     assert_eq!(1, modified_files[0].len());
     assert_eq!(3, modified_files[0].added());
     assert_eq!(1, modified_files[0].removed());
+
+    assert_eq!(7, patch.added());
+    assert_eq!(4, patch.removed());
 }
 
 #[test]
@@ -164,6 +173,9 @@ fn test_parse_hg_diff() {
     assert_eq!(1, modified_files[0].len());
     assert_eq!(3, modified_files[0].added());
     assert_eq!(1, modified_files[0].removed());
+
+    assert_eq!(7, patch.added());
+    assert_eq!(4, patch.removed());
 }
 
 #[test]
@@ -202,6 +214,9 @@ fn test_parse_svn_diff() {
     assert_eq!(1, modified_files[0].len());
     assert_eq!(3, modified_files[0].added());
     assert_eq!(1, modified_files[0].removed());
+
+    assert_eq!(7, patch.added());
+    assert_eq!(4, patch.removed());
 }
 
 #[test]

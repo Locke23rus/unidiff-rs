@@ -1,6 +1,6 @@
 extern crate unidiff;
 
-use unidiff::PatchSet;
+use unidiff::{PatchSet, LINE_TYPE_CONTEXT, LINE_TYPE_NO_NEWLINE};
 
 #[test]
 fn test_parse_sample0_diff() {
@@ -380,12 +380,15 @@ fn test_parse_no_newline_at_end_of_file() {
 
     // 3 files updated by diff
     assert_eq!(3, patch.len());
-    assert_eq!("\\", patch.added_files()[0][0][4].line_type);
+    assert_eq!(LINE_TYPE_NO_NEWLINE, patch.added_files()[0][0][4].line_type);
     assert_eq!(
         " No newline at end of file",
         patch.added_files()[0][0][4].value
     );
-    assert_eq!("\\", patch.modified_files()[0][0][8].line_type);
+    assert_eq!(
+        LINE_TYPE_NO_NEWLINE,
+        patch.modified_files()[0][0][8].line_type
+    );
     assert_eq!(
         " No newline at end of file",
         patch.modified_files()[0][0][8].value
@@ -393,9 +396,37 @@ fn test_parse_no_newline_at_end_of_file() {
 }
 
 #[test]
+fn test_parse_dos_line_endings() {
+    let buf = include_str!("fixtures/sample4.diff");
+
+    let mut patch = PatchSet::new();
+    patch.parse(&buf).unwrap();
+
+    // 3 files updated by diff
+    assert_eq!(3, patch.len());
+    assert_eq!("holá mundo!", patch[0][0][1].value);
+}
+
+#[test]
+fn test_parse_dos_line_endings_empty_line_type() {
+    let buf = include_str!("fixtures/sample5.diff");
+
+    let mut patch = PatchSet::new();
+    patch.parse(&buf).unwrap();
+
+    // 2 files updated by diff
+    assert_eq!(2, patch.len());
+    assert_eq!("", patch[0][0][6].value);
+    assert_eq!(LINE_TYPE_CONTEXT, patch.modified_files()[0][0][6].line_type);
+
+    assert_eq!("", patch[1][0][6].value);
+    assert_eq!(LINE_TYPE_CONTEXT, patch.modified_files()[1][0][6].line_type);
+}
+
+#[test]
 fn test_single_line_diff() {
     {
-        let buf = include_str!("fixtures/sample_single_line.diff");
+        let buf = include_str!("fixtures/sample_single_line_added.diff");
 
         let mut patch = PatchSet::new();
         patch.parse(&buf).unwrap();
@@ -409,7 +440,7 @@ fn test_single_line_diff() {
         assert_eq!(0, added_files[0].removed());
     }
     {
-        let buf = include_str!("fixtures/sample5.diff");
+        let buf = include_str!("fixtures/sample_single_line_removed.diff");
 
         let mut patch = PatchSet::new();
         patch.parse(&buf).unwrap();

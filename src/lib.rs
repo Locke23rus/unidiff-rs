@@ -318,7 +318,7 @@ pub struct PatchedFile {
     /// Target file timestamp
     pub target_timestamp: Option<String>,
     hunks: Vec<Hunk>,
-    pub is_binary_file: bool,
+    is_binary_file: bool,
 }
 
 impl PatchedFile {
@@ -390,6 +390,11 @@ impl PatchedFile {
     /// Is this file modified
     pub fn is_modified_file(&self) -> bool {
         !self.is_added_file() && !self.is_removed_file()
+    }
+
+    /// Is this file binary
+    pub fn is_binary_file(&self) -> bool {
+        self.is_binary_file
     }
 
     fn parse_hunk(&mut self, header: &str, diff: &[(usize, &str)]) -> Result<()> {

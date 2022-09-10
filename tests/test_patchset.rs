@@ -18,7 +18,7 @@ fn test_parse_sample0_diff() {
     assert!(patch[0].is_modified_file());
     assert!(!patch[0].is_added_file());
     assert!(!patch[0].is_removed_file());
-    assert!(!patch[0].is_binary_file);
+    assert!(!patch[0].is_binary_file());
 
     // Hunk 1: five additions, no deletions, a section header
     assert_eq!(6, patch[0][0].added());
@@ -43,13 +43,13 @@ fn test_parse_sample0_diff() {
     assert!(!patch[1].is_modified_file());
     assert!(patch[1].is_added_file());
     assert!(!patch[1].is_removed_file());
-    assert!(!patch[1].is_binary_file);
+    assert!(!patch[1].is_binary_file());
 
     // third file is removed
     assert!(!patch[2].is_modified_file());
     assert!(!patch[2].is_added_file());
     assert!(patch[2].is_removed_file());
-    assert!(!patch[2].is_binary_file);
+    assert!(!patch[2].is_binary_file());
 
     assert_eq!(21, patch.added());
     assert_eq!(17, patch.removed());

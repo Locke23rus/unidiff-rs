@@ -36,7 +36,19 @@ lazy_static! {
     static ref RE_TARGET_FILENAME: Regex = Regex::new(r"^\+\+\+ (?P<filename>[^\t\n]+)(?:\t(?P<timestamp>[^\n]+))?").unwrap();
     static ref RE_HUNK_HEADER: Regex = Regex::new(r"^@@ -(?P<source_start>\d+)(?:,(?P<source_length>\d+))? \+(?P<target_start>\d+)(?:,(?P<target_length>\d+))? @@[ ]?(?P<section_header>.*)").unwrap();
     static ref RE_HUNK_BODY_LINE: Regex = Regex::new(r"^(?P<line_type>[- \n\+\\]?)(?P<value>.*)").unwrap();
+    static ref RE_HUNK_EMPTY_BODY_LINE: Regex = Regex::new(r"^(?P<line_type>[- \+\\]?)(?P<value>[\r\n]{1,2})").unwrap();
     static ref RE_NO_NEWLINE_MARKER: Regex = Regex::new(r"^\\ No newline at end of file").unwrap();
+    // check diff git line for git renamed files support
+    static ref RE_DIFF_GIT_HEADER: Regex = Regex::new(r"^diff --git (?P<source>a/[^\t\n]+) (?P<target>b/[^\t\n]+)").unwrap();
+    // check diff git new file marker `deleted file mode 100644`
+    static ref RE_DIFF_GIT_DELETED_FILE: Regex = Regex::new(r"^deleted file mode \d+$").unwrap();
+    // check diff git new file marker `new file mode 100644`
+    static ref RE_DIFF_GIT_NEW_FILE: Regex = Regex::new(r"^new file mode \d+$").unwrap();
+    static ref RE_BINARY_DIFF: Regex = Regex::new(concat!(
+        r"^Binary files? ",
+        r"(?P<source_filename>[^\t]+?)(?:\t(?P<source_timestamp>[\s0-9:\+-]+))?",
+        r"(?: and (?P<target_filename>[^\t]+?)(?:\t(?P<target_timestamp>[\s0-9:\+-]+))?)? (differ|has changed)"
+    )).unwrap();
 }
 
 /// Diff line is added
@@ -49,8 +61,8 @@ pub const LINE_TYPE_CONTEXT: &'static str = " ";
 pub const LINE_TYPE_EMPTY: &'static str = "\n";
 /// Diff line no newline at end of file
 pub const LINE_TYPE_NO_NEWLINE: &'static str = "\\";
-/// FIXME add comment
 pub const LINE_VALUE_NO_NEWLINE: &'static str = " No newline at end of file";
+pub const DEV_NULL: &'static str = "/dev/null";
 
 /// Error type
 #[derive(Debug, Clone)]
@@ -63,6 +75,14 @@ pub enum Error {
     ExpectLine(String),
     /// Unexpected marker
     UnexpectedMarker(String),
+    /// Unexpected new file found
+    UnexpectedNewFile(String),
+    /// Unexpected deleted file found
+    UnexpectedDeletedFile(String),
+    /// Hunk is longer than expected
+    HunkTooLong,
+    /// Hunk is shorter than expected
+    HunkTooShort,
 }
 
 impl fmt::Display for Error {
@@ -72,6 +92,12 @@ impl fmt::Display for Error {
             Error::UnexpectedHunk(ref l) => write!(f, "Unexpected hunk found: {}", l),
             Error::ExpectLine(ref l) => write!(f, "Hunk line expected: {}", l),
             Error::UnexpectedMarker(ref l) => write!(f, "Unexpected marker: {}", l),
+            Error::UnexpectedNewFile(ref l) => write!(f, "Unexpected new file found: {}", l),
+            Error::UnexpectedDeletedFile(ref l) => {
+                write!(f, "Unexpected deleted file found: {}", l)
+            }
+            Error::HunkTooLong => write!(f, "Hunk is longer than expected"),
+            Error::HunkTooShort => write!(f, "Hunk is shorter than expected"),
         }
     }
 }
@@ -83,6 +109,10 @@ impl error::Error for Error {
             Error::UnexpectedHunk(..) => "Unexpected hunk found",
             Error::ExpectLine(..) => "Hunk line expected",
             Error::UnexpectedMarker(..) => "Unexpected marker",
+            Error::UnexpectedNewFile(..) => "Unexpected new file found",
+            Error::UnexpectedDeletedFile(..) => "Unexpected deleted file found",
+            Error::HunkTooLong => "Hunk is longer than expected",
+            Error::HunkTooShort => "Hunk is shorter than expected",
         }
     }
 }
@@ -355,10 +385,10 @@ impl PatchedFile {
         if self.source_file.starts_with("a/") && self.target_file.starts_with("b/") {
             return self.source_file[2..].to_owned();
         }
-        if self.source_file.starts_with("a/") && "/dev/null" == &self.target_file {
+        if self.source_file.starts_with("a/") && DEV_NULL == &self.target_file {
             return self.source_file[2..].to_owned();
         }
-        if self.target_file.starts_with("b/") && "/dev/null" == &self.source_file {
+        if self.target_file.starts_with("b/") && DEV_NULL == &self.source_file {
             return self.target_file[2..].to_owned();
         }
         self.source_file.clone()
@@ -379,11 +409,17 @@ impl PatchedFile {
 
     /// Is this file newly added
     pub fn is_added_file(&self) -> bool {
+        if self.source_file == DEV_NULL {
+            return true;
+        }
         self.hunks.len() == 1 && self.hunks[0].source_start == 0 && self.hunks[0].source_length == 0
     }
 
     /// Is this file removed
     pub fn is_removed_file(&self) -> bool {
+        if self.target_file == DEV_NULL {
+            return true;
+        }
         self.hunks.len() == 1 && self.hunks[0].target_start == 0 && self.hunks[0].target_length == 0
     }
 
@@ -439,45 +475,70 @@ impl PatchedFile {
         let expected_source_end = source_start + source_length;
         let expected_target_end = target_start + target_length;
         for &(diff_line_no, line) in diff {
+            // parse diff line content
             if let Some(valid_line) = RE_HUNK_BODY_LINE.captures(line) {
                 let mut line_type = valid_line.name("line_type").unwrap().as_str();
                 if line_type == LINE_TYPE_EMPTY || line_type == "" {
                     line_type = LINE_TYPE_CONTEXT;
                 }
                 let value = valid_line.name("value").unwrap().as_str();
-                let mut original_line = Line {
+                let mut original_line = Some(Line {
                     source_line_no: None,
                     target_line_no: None,
-                    diff_line_no: diff_line_no + 1,
+                    diff_line_no: diff_line_no,
                     line_type: line_type.to_owned(),
                     value: value.to_owned(),
-                };
+                });
                 match line_type {
                     LINE_TYPE_ADDED => {
-                        original_line.target_line_no = Some(target_line_no);
+                        let ref mut orig_line = original_line.as_mut().unwrap();
+                        orig_line.target_line_no = Some(target_line_no);
                         target_line_no = target_line_no + 1;
                     }
                     LINE_TYPE_REMOVED => {
-                        original_line.source_line_no = Some(source_line_no);
+                        let ref mut orig_line = original_line.as_mut().unwrap();
+                        orig_line.source_line_no = Some(source_line_no);
                         source_line_no = source_line_no + 1;
                     }
                     LINE_TYPE_CONTEXT => {
-                        original_line.target_line_no = Some(target_line_no);
+                        let ref mut orig_line = original_line.as_mut().unwrap();
+                        orig_line.target_line_no = Some(target_line_no);
+                        orig_line.source_line_no = Some(source_line_no);
                         target_line_no = target_line_no + 1;
-                        original_line.source_line_no = Some(source_line_no);
                         source_line_no = source_line_no + 1;
                     }
-                    _ => {}
+                    LINE_TYPE_NO_NEWLINE => {
+                        continue;
+                    }
+                    _ => {
+                        original_line = None;
+                    }
                 }
-                hunk.append(original_line);
-                if source_line_no >= expected_source_end && target_line_no >= expected_target_end {
-                    // FIXME: sync with upstream version
+
+                // stop parsing if we got past expected number of lines
+                if source_line_no > expected_source_end || target_line_no > expected_target_end {
+                    return Err(Error::HunkTooLong);
+                }
+
+                if let Some(mut orig_line) = original_line {
+                    orig_line.diff_line_no = diff_line_no;
+                    hunk.lines.push(orig_line);
+                }
+
+                // if hunk source/target lengths are ok, hunk is complete
+                if source_line_no == expected_source_end && target_line_no == expected_target_end {
                     break;
                 }
-            } else {
+            } else if !RE_HUNK_EMPTY_BODY_LINE.is_match(line) {
                 return Err(Error::ExpectLine(line.to_owned()));
             }
         }
+
+        // report an error if we haven't got expected number of lines
+        if source_line_no < expected_source_end || target_line_no < expected_target_end {
+            return Err(Error::HunkTooShort);
+        }
+
         self.hunks.push(hunk);
         Ok(())
     }
@@ -656,8 +717,70 @@ impl PatchSet {
         let diff: Vec<(usize, &str)> = input.lines().enumerate().collect();
         let mut source_file: Option<String> = None;
         let mut source_timestamp: Option<String> = None;
+        let mut patch_info: Option<Vec<String>> = None;
 
         for &(line_no, line) in &diff {
+            // check for a git file rename
+            if let Some(captures) = RE_DIFF_GIT_HEADER.captures(line) {
+                patch_info = Some(vec![]);
+                source_file = match captures.name("source") {
+                    Some(ref filename) => Some(filename.as_str().to_owned()),
+                    None => Some("".to_owned()),
+                };
+                let target_file = match captures.name("target") {
+                    Some(ref filename) => Some(filename.as_str().to_owned()),
+                    None => Some("".to_owned()),
+                };
+                let patched_file = PatchedFile {
+                    source_file: source_file.clone().unwrap(),
+                    target_file: target_file.clone().unwrap(),
+                    source_timestamp: None,
+                    target_timestamp: None,
+                    hunks: vec![],
+                    is_binary_file: false,
+                };
+                current_file = Some(patched_file.clone());
+                self.files.push(patched_file);
+                if let Some(ref mut info) = patch_info {
+                    info.push(line.to_owned());
+                }
+                continue;
+            }
+
+            // check for a git new file
+            if RE_DIFF_GIT_NEW_FILE.is_match(line) {
+                if current_file.is_none() || patch_info.is_none() {
+                    return Err(Error::UnexpectedNewFile(line.to_owned()));
+                }
+                if let Some(ref mut patched_file) = current_file {
+                    // if current_file.is_some() {
+                    let last_file = self.files.last_mut().unwrap();
+                    last_file.source_file = DEV_NULL.to_owned();
+                    patched_file.source_file = DEV_NULL.to_owned();
+                }
+                if let Some(ref mut info) = patch_info {
+                    info.push(line.to_owned());
+                }
+                continue;
+            }
+
+            // check for a git deleted file
+            if RE_DIFF_GIT_DELETED_FILE.is_match(line) {
+                if current_file.is_none() || patch_info.is_none() {
+                    return Err(Error::UnexpectedDeletedFile(line.to_owned()));
+                }
+                if let Some(ref mut patched_file) = current_file {
+                    // if current_file.is_some() {
+                    let last_file = self.files.last_mut().unwrap();
+                    last_file.target_file = DEV_NULL.to_owned();
+                    patched_file.target_file = DEV_NULL.to_owned();
+                }
+                if let Some(ref mut info) = patch_info {
+                    info.push(line.to_owned());
+                }
+                continue;
+            }
+
             // check for source file header
             if let Some(captures) = RE_SOURCE_FILENAME.captures(line) {
                 source_file = match captures.name("filename") {
@@ -668,17 +791,22 @@ impl PatchSet {
                     Some(ref timestamp) => Some(timestamp.as_str().to_owned()),
                     None => Some("".to_owned()),
                 };
-                if let Some(patched_file) = current_file {
-                    self.files.push(patched_file.clone());
-                    current_file = None;
+                // reset current file, unless we are processing a rename
+                // (in that case, source files should match)
+                if let Some(ref mut patched_file) = current_file {
+                    if patched_file.source_file != source_file.clone().unwrap() {
+                        current_file = None;
+                    } else {
+                        let last_file = self.files.last_mut().unwrap();
+                        last_file.source_timestamp = source_timestamp.clone();
+                        patched_file.source_timestamp = source_timestamp.clone();
+                    }
                 }
                 continue;
             }
+
             // check for target file header
             if let Some(captures) = RE_TARGET_FILENAME.captures(line) {
-                if current_file.is_some() {
-                    return Err(Error::TargetWithoutSource(line.to_owned()));
-                }
                 let target_file = match captures.name("filename") {
                     Some(ref filename) => Some(filename.as_str().to_owned()),
                     None => Some("".to_owned()),
@@ -688,38 +816,99 @@ impl PatchSet {
                     None => Some("".to_owned()),
                 };
 
-                // add current file to PatchSet
-                current_file = Some(PatchedFile {
-                    source_file: source_file.clone().unwrap(),
-                    target_file: target_file.clone().unwrap(),
-                    source_timestamp: source_timestamp.clone(),
-                    target_timestamp: target_timestamp.clone(),
-                    hunks: Vec::new(),
-                    is_binary_file: false,
-                });
+                if let Some(ref mut patched_file) = current_file {
+                    if patched_file.target_file != target_file.unwrap() {
+                        return Err(Error::TargetWithoutSource(line.to_owned()));
+                    }
+                    let last_file = self.files.last_mut().unwrap();
+                    last_file.target_timestamp = target_timestamp.clone();
+                    patched_file.target_timestamp = target_timestamp;
+                } else {
+                    // add current file to PatchSet
+                    let patched_file = PatchedFile {
+                        source_file: source_file.clone().unwrap(),
+                        target_file: target_file.clone().unwrap(),
+                        source_timestamp: source_timestamp.clone(),
+                        target_timestamp: target_timestamp.clone(),
+                        hunks: vec![],
+                        is_binary_file: false,
+                    };
+                    current_file = Some(patched_file.clone());
+                    self.files.push(patched_file);
+                    patch_info = None;
+                }
                 continue;
             }
+
             // check for hunk header
             if RE_HUNK_HEADER.is_match(line) {
+                patch_info = None;
                 if let Some(ref mut patched_file) = current_file {
+                    // if current_file.is_some() {
+                    let last_file = self.files.last_mut().unwrap();
+                    last_file.parse_hunk(line, &diff[line_no + 1..])?;
                     patched_file.parse_hunk(line, &diff[line_no + 1..])?;
                 } else {
                     return Err(Error::UnexpectedHunk(line.to_owned()));
                 }
+                continue;
             }
 
             // check for no newline marker
             if RE_NO_NEWLINE_MARKER.is_match(line) {
                 if let Some(ref mut patched_file) = current_file {
+                    // if current_file.is_some() {
+                    let last_file = self.files.last_mut().unwrap();
+                    last_file.add_no_newline_marker_to_last_hunk()?;
                     patched_file.add_no_newline_marker_to_last_hunk()?;
+                    continue;
                 } else {
                     return Err(Error::UnexpectedMarker(line.to_owned()));
                 }
+            }
+
+            if patch_info.is_none() {
+                current_file = None;
+                patch_info = Some(vec![]);
+            }
+
+            if let Some(captures) = RE_BINARY_DIFF.captures(line) {
+                source_file = match captures.name("source_filename") {
+                    Some(ref filename) => Some(filename.as_str().to_owned()),
+                    None => Some("".to_owned()),
+                };
+                let target_file = match captures.name("target_filename") {
+                    Some(ref filename) => Some(filename.as_str().to_owned()),
+                    None => Some("".to_owned()),
+                };
+                if let Some(ref mut info) = patch_info {
+                    info.push(line.to_owned());
+                }
+                if let Some(ref mut patched_file) = current_file {
+                    // if current_file.is_some() {
+                    let last_file = self.files.last_mut().unwrap();
+                    last_file.is_binary_file = true;
+                    patched_file.is_binary_file = true;
+                } else {
+                    let patched_file = PatchedFile {
+                        source_file: source_file.clone().unwrap(),
+                        target_file: target_file.clone().unwrap(),
+                        source_timestamp: None,
+                        target_timestamp: None,
+                        hunks: vec![],
+                        is_binary_file: true,
+                    };
+                    self.files.push(patched_file);
+                }
+                // dbg!(current_file);
+                patch_info = None;
+                current_file = None;
                 continue;
             }
-        }
-        if let Some(patched_file) = current_file {
-            self.files.push(patched_file.clone());
+
+            if let Some(ref mut info) = patch_info {
+                info.push(line.to_owned());
+            }
         }
         Ok(())
     }

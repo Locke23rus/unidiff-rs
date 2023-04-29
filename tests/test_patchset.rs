@@ -413,3 +413,22 @@ fn test_parse_patchset_from_str() {
     // three hunks
     assert_eq!(3, patch[0].len());
 }
+
+#[test]
+fn test_parse_diff_with_new_and_modified_binary_files() {
+    // Parse git diff file with newly added and modified binaries files
+    let buf = include_str!("fixtures/sample8.diff");
+
+    let patch: PatchSet = buf.parse().unwrap();
+
+    // dbg!(patch.clone());
+
+    // five file in the patch
+    assert_eq!(5, patch.len());
+
+    // first empty file is added
+    assert!(!patch[0].is_modified_file());
+    assert!(!patch[0].is_added_file());
+    assert!(patch[0].is_removed_file());
+    assert!(!patch[0].is_binary_file());
+}
